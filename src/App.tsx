@@ -18,18 +18,26 @@ import {
   CardMedia,
   CardActions,
   CardHeader,
+  Pagination,
 } from '@mui/material';
 import GridViewIcon from '@mui/icons-material/GridView';
 import TableRowsIcon from '@mui/icons-material/TableRows';
 import SearchIcon from '@mui/icons-material/Search';
 import PreviewIcon from '@mui/icons-material/ZoomIn';
 import DeleteIcon from '@mui/icons-material/Delete';
+import ClearIcon from '@mui/icons-material/Clear';
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward';
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward';
 import { makeStyles } from '@mui/styles';
 import tinycolor from 'tinycolor2';
 import classNames from 'classnames';
 import axios from 'axios';
 import { red } from '@mui/material/colors';
+import Fuse from 'fuse.js';
+import { orderBy } from 'lodash';
+
 import config from './config';
+import { ConfirmDialog } from './components';
 
 interface Image {
   albumId: number;
@@ -77,16 +85,42 @@ const useStyles = makeStyles((theme: Theme) => ({
       backgroundColor: `${tinycolor(theme.palette.primary.main).lighten(5).toString()} !important`,
     },
   },
+  clearFilterBtn: {
+    minWidth: '30px !important',
+    width: 30,
+    color: `${red[500]} !important`,
+    backgroundColor: `${red[50]} !important`,
+
+    '&:hover': {
+      backgroundColor: `${red[100]} !important`,
+    },
+  },
+  selectItem: {
+    display: 'flex !important',
+    alignItems: 'center',
+  },
+  selectItemIcon: {
+    fontSize: 18,
+  },
 }));
 
 const App: React.FC = (): React.ReactElement => {
   const classes = useStyles();
+  const tableTopRef = React.useRef<HTMLDivElement>(null);
   const [view, setView] = React.useState(localStorage.getItem('view'));
   const [sort, setSort] = React.useState('');
-  const [itemsOnPage, setItemsOnPage] = React.useState('10');
+  const [searchValue, setSearchValue] = React.useState('');
+  const [itemsOnPage, setItemsOnPage] = React.useState(10);
   const [images, setImages] = React.useState<Image[]>([]);
+  const [filteredImages, setFilteredImages] = React.useState<Image[]>([]);
   const [imagesLoading, setImagesLoading] = React.useState(false);
-  const fuse = new
+  const [page, setPage] = React.useState(1);
+  const [photoToDelete, setPhotoToDelete] = React.useState(null);
+  const fuse = new Fuse(images, {
+    keys: ['title'],
+    threshold: 0.2,
+    distance: 30,
+  });
 
   const hadleChangeView = (e: React.MouseEvent<HTMLButtonElement>) => {
     setView(e.currentTarget.name);
@@ -94,12 +128,42 @@ const App: React.FC = (): React.ReactElement => {
     localStorage.setItem('view', e.currentTarget.name);
   };
 
+  const handleChangeSearchValue = (e: React.ChangeEvent<HTMLInputElement>) => {
+    if (sort) {
+      setSort('');
+    }
+
+    setSearchValue(e.target.value);
+  };
+
   const handleChangeSort = (e: SelectChangeEvent) => {
-    setSort(e.target.value);
+    const sort = e.target.value;
+
+    setSort(sort);
+  };
+
+  const handleClearSort = () => {
+    setSort('');
   };
 
   const handleChangeItemsOnPage = (e: SelectChangeEvent) => {
-    setItemsOnPage(e.target.value);
+    setItemsOnPage(Number(e.target.value));
+  };
+
+  const handleChangePage = (event: React.ChangeEvent<any>, page: number) => {
+    setPage(page);
+
+    if (tableTopRef.current) {
+      tableTopRef.current.scrollIntoView({ behavior: 'smooth' });
+    }
+  };
+
+  const handleDeleteImage = (imageId: number) => {
+    setPhotoToDelete(imageId);
+  };
+
+  const onConfirmPhotoDelete = () => {
+    setImages((prevImages) => prevImages.filter((image) => image.id !== photoToDelete));
   };
 
   React.useEffect(() => {
@@ -108,7 +172,7 @@ const App: React.FC = (): React.ReactElement => {
         setImagesLoading(true);
 
         const { data } = await axios.get<Image[]>(
-          `${config.server.host}${config.server.api.getAllImages.uri}`,
+          `${config.server.host}${config.server.api.getAllImages.uri}`
         );
 
         setImages(data);
@@ -118,6 +182,36 @@ const App: React.FC = (): React.ReactElement => {
     })();
   }, []);
 
+  React.useEffect(() => {
+    setFilteredImages(images);
+  }, [images]);
+
+  React.useEffect(() => {
+    if (searchValue) {
+      const searchData = fuse.search(searchValue);
+
+      setFilteredImages(searchData.map(({ item }) => item));
+    } else {
+      setFilteredImages(images);
+    }
+
+    /* eslint-disable-next-line */
+  }, [searchValue]);
+
+  React.useEffect(() => {
+    if (sort) {
+      setFilteredImages((prevImages) =>
+        orderBy(prevImages, ['albumId'], sort === 'asc' ? 'asc' : 'desc')
+      );
+    } else {
+      setFilteredImages(images);
+    }
+
+    setPage(1);
+
+    /* eslint-disable-next-line */
+  }, [sort]);
+
   return (
     <div className="App">
       <Container>
@@ -125,7 +219,7 @@ const App: React.FC = (): React.ReactElement => {
           Image Viewer App
         </Typography>
         <Paper elevation={5} className={classes.toolbar}>
-          <Grid container spacing={5}>
+          <Grid container spacing={5} ref={tableTopRef}>
             <Grid
               container
               item
@@ -139,30 +233,56 @@ const App: React.FC = (): React.ReactElement => {
                 <TextField
                   label="Search"
                   variant="outlined"
+                  value={searchValue}
+                  onChange={handleChangeSearchValue}
                   InputProps={{ startAdornment: <SearchIcon /> }}
                   fullWidth
                 />
               </Grid>
-              <Grid item xs={3}>
-                <FormControl fullWidth>
-                  <InputLabel>Sort</InputLabel>
-                  <Select value={sort} label="Sort" onChange={handleChangeSort}>
-                    <MenuItem value={10}>By Album Number (Asc)</MenuItem>
-                    <MenuItem value={20}>By Album Number (Desc)</MenuItem>
-                  </Select>
-                </FormControl>
+              <Grid container item spacing={2} xs={3} alignItems="center">
+                <Grid item xs={sort ? 11 : 12}>
+                  <FormControl fullWidth>
+                    <InputLabel>Sort</InputLabel>
+                    <Select
+                      value={sort}
+                      label="Sort"
+                      onChange={handleChangeSort}
+                      classes={{
+                        select: classes.selectItem,
+                      }}
+                    >
+                      <MenuItem value="asc">
+                        Album Number <ArrowUpwardIcon className={classes.selectItemIcon} />
+                      </MenuItem>
+                      <MenuItem value="desc">
+                        Album Number <ArrowDownwardIcon className={classes.selectItemIcon} />
+                      </MenuItem>
+                    </Select>
+                  </FormControl>
+                </Grid>
+                {sort && (
+                  <Grid item xs={1}>
+                    <Button
+                      size="small"
+                      className={classes.clearFilterBtn}
+                      onClick={handleClearSort}
+                    >
+                      <ClearIcon />
+                    </Button>
+                  </Grid>
+                )}
               </Grid>
               <Grid item xs={3}>
                 <FormControl fullWidth>
                   <InputLabel>Items on page</InputLabel>
                   <Select
-                    value={itemsOnPage}
+                    value={String(itemsOnPage)}
                     label="Items on page"
                     onChange={handleChangeItemsOnPage}
                   >
-                    <MenuItem value="10">Ten</MenuItem>
-                    <MenuItem value="20">Twenty</MenuItem>
-                    <MenuItem value="30">Thirty</MenuItem>
+                    <MenuItem value={10}>Ten</MenuItem>
+                    <MenuItem value={20}>Twenty</MenuItem>
+                    <MenuItem value={30}>Thirty</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -198,35 +318,41 @@ const App: React.FC = (): React.ReactElement => {
                 </Grid>
               )}
               {!imagesLoading &&
-                (images.length ? (
+                (filteredImages.length ? (
                   <Grid container item spacing={5} xs={12}>
-                    {images.slice(0, parseInt(itemsOnPage)).map((image: Image) => (
-                      <Grid item xs={4} key={image.id}>
-                        <Card>
-                          <CardHeader title={image.title.slice(0, 20)} />
-                          <CardMedia
-                            component="img"
-                            height="100%"
-                            image={image.thumbnailUrl}
-                            alt={image.title}
-                          />
-                          <CardActions>
-                            <Button
-                              size="small"
-                              className={classNames(classes.btn, classes.deleteBtn)}
-                            >
-                              <DeleteIcon />
-                            </Button>
-                            <Button
-                              size="small"
-                              className={classNames(classes.btn, classes.previewBtn)}
-                            >
-                              <PreviewIcon />
-                            </Button>
-                          </CardActions>
-                        </Card>
-                      </Grid>
-                    ))}
+                    {filteredImages
+                      .slice(itemsOnPage * (page - 1), page * itemsOnPage)
+                      .map((image: Image) => (
+                        <Grid item xs={4} key={image.id}>
+                          <Card>
+                            <CardHeader
+                              title={image.title.slice(0, 20)}
+                              subheader={`Album ID: ${image.albumId}`}
+                            />
+                            <CardMedia
+                              component="img"
+                              height="100%"
+                              image={image.thumbnailUrl}
+                              alt={image.title}
+                            />
+                            <CardActions>
+                              <Button
+                                size="small"
+                                className={classNames(classes.btn, classes.deleteBtn)}
+                                onClick={() => handleDeleteImage(image.id)}
+                              >
+                                <DeleteIcon />
+                              </Button>
+                              <Button
+                                size="small"
+                                className={classNames(classes.btn, classes.previewBtn)}
+                              >
+                                <PreviewIcon />
+                              </Button>
+                            </CardActions>
+                          </Card>
+                        </Grid>
+                      ))}
                   </Grid>
                 ) : (
                   <Grid item>
@@ -234,9 +360,30 @@ const App: React.FC = (): React.ReactElement => {
                   </Grid>
                 ))}
             </Grid>
+            {!imagesLoading && !!images.length && (
+              <Grid container item xs={12} justifyContent="flex-end">
+                <Grid item>
+                  <Pagination
+                    count={Math.floor(filteredImages.length / itemsOnPage)}
+                    boundaryCount={2}
+                    page={page}
+                    onChange={handleChangePage}
+                    color="primary"
+                  />
+                </Grid>
+              </Grid>
+            )}
           </Grid>
         </Paper>
       </Container>
+      <ConfirmDialog
+        title="Confirm photo deletion"
+        text="Are you sure that you want to delete this photo? Note: this action is permanent🙃"
+        open={photoToDelete}
+        onOk={onConfirmPhotoDelete}
+        handleClose={() => setPhotoToDelete(null)}
+        maxWidth="sm"
+      />
     </div>
   );
 };
