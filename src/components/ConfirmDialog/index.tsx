@@ -14,7 +14,7 @@ import useConfirmDialogStyles from './styles';
 interface ConfirmDialogProps {
   title: string;
   text: string;
-  open: boolean | null;
+  open: number | null;
   onOk: () => void;
   handleClose: () => void;
   maxWidth?: Breakpoint;
@@ -27,11 +27,11 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
   onOk,
   handleClose,
   maxWidth,
-}) => {
+}): React.ReactElement => {
   const classes = useConfirmDialogStyles();
 
   return (
-    <Dialog maxWidth={maxWidth} open={open} onClose={handleClose} fullWidth>
+    <Dialog maxWidth={maxWidth} open={Boolean(open)} onClose={handleClose} fullWidth>
       <DialogTitle>{title}</DialogTitle>
       <DialogContent>
         <DialogContentText className={classes.text}>{text}</DialogContentText>

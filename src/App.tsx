@@ -115,7 +115,7 @@ const App: React.FC = (): React.ReactElement => {
   const [filteredImages, setFilteredImages] = React.useState<Image[]>([]);
   const [imagesLoading, setImagesLoading] = React.useState(false);
   const [page, setPage] = React.useState(1);
-  const [photoToDelete, setPhotoToDelete] = React.useState(null);
+  const [photoToDelete, setPhotoToDelete] = React.useState<number | null>(null);
   const fuse = new Fuse(images, {
     keys: ['title'],
     threshold: 0.2,
@@ -164,6 +164,7 @@ const App: React.FC = (): React.ReactElement => {
 
   const onConfirmPhotoDelete = () => {
     setImages((prevImages) => prevImages.filter((image) => image.id !== photoToDelete));
+    setPhotoToDelete(null);
   };
 
   React.useEffect(() => {
@@ -378,7 +379,7 @@ const App: React.FC = (): React.ReactElement => {
       </Container>
       <ConfirmDialog
         title="Confirm photo deletion"
-        text="Are you sure that you want to delete this photo? Note: this action is permanent🙃"
+        text="Are you sure that you want to delete this photo? This action is permanent!"
         open={photoToDelete}
         onOk={onConfirmPhotoDelete}
         handleClose={() => setPhotoToDelete(null)}
