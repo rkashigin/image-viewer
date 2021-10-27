@@ -9,12 +9,13 @@ import {
   Breakpoint,
 } from '@mui/material';
 
+import { Image } from '../../interfaces';
 import useConfirmDialogStyles from './styles';
 
 interface ConfirmDialogProps {
   title: string;
   text: string;
-  open: number | null;
+  open: Image | number | null;
   onOk: () => void;
   handleClose: () => void;
   maxWidth?: Breakpoint;
