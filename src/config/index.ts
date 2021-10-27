@@ -1,6 +1,6 @@
 const config = {
   server: {
-    host: 'http://jsonplaceholder.typicode.com',
+    host: 'https://jsonplaceholder.typicode.com',
     api: {
       getAllImages: {
         uri: '/photos',
